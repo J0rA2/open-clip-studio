@@ -1,15 +1,18 @@
-FROM node:20-bullseye-slim
+FROM node:20-bookworm-slim
 
-# Install system dependencies: Python 3, pip, ffmpeg, fonts for subtitles
-FROM python:3.12-bookworm
-
-ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV NODE_ENV=production
+ENV PORT=10000
 
 WORKDIR /app
 
+# System dependencies
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+        python3 \
+        python3-pip \
+        python3-venv \
         ffmpeg \
         fontconfig \
         fonts-noto-color-emoji \
@@ -18,43 +21,42 @@ RUN apt-get update \
         git \
     && rm -rf /var/lib/apt/lists/*
 
-COPY . .
-
-RUN if [ -f requirements.txt ]; then pip install --no-cache-dir -r requirements.txt; fi
-
-ENV PORT=10000
-
-EXPOSE 10000
-
-# Install latest yt-dlp globally
-RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
+# yt-dlp
+RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
+    -o /usr/local/bin/yt-dlp \
     && chmod a+rx /usr/local/bin/yt-dlp
 
-# Set working directory
-WORKDIR /app
-
-# Copy package manifests
+# Root Node dependencies
 COPY package*.json ./
+RUN npm ci --omit=dev
+
+# Client dependencies
 COPY client/package*.json ./client/
+RUN npm ci --prefix client
+
+# Python virtual environment
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Python dependencies
 COPY server/requirements.txt ./server/
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r server/requirements.txt
 
-# Install Node dependencies and Python dependencies
-RUN npm ci --prefix client && npm install --omit=dev
-RUN pip3 install --no-cache-dir -r server/requirements.txt
-
-# Copy source code
+# Copy application
 COPY . .
 
-# Build frontend client for production serving
+# Build React frontend
 RUN npm --prefix client run build
 
-# Ensure uploads, exports, previews have write permissions
-RUN mkdir -p server/uploads/previews server/exports server/samples server/assets/sfx \
+# Runtime directories
+RUN mkdir -p \
+    server/uploads/previews \
+    server/exports \
+    server/samples \
+    server/assets/sfx \
     && chmod -R 777 server/uploads server/exports server/samples
 
-# Default port (7860 is default for Hugging Face Spaces; can be overridden via PORT env var)
-ENV PORT=7860
-ENV NODE_ENV=production
-EXPOSE 7860
+EXPOSE 10000
 
 CMD ["node", "server/server.js"]
