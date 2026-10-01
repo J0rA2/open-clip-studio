@@ -7,7 +7,6 @@ ENV PORT=10000
 
 WORKDIR /app
 
-# System packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
@@ -20,57 +19,31 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# yt-dlp
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
     -o /usr/local/bin/yt-dlp \
     && chmod +x /usr/local/bin/yt-dlp
 
-# ------------------------------------------------
-# ROOT DEPENDENCIES
-# Ignore postinstall because we handle everything
-# manually below.
-# ------------------------------------------------
-
-COPY package.json package-lock.json ./
-
+# Root dependencies — don't run postinstall
+COPY package*.json ./
 RUN npm install --omit=dev --ignore-scripts
 
-# ------------------------------------------------
-# CLIENT DEPENDENCIES
-# ------------------------------------------------
+# Client dependencies — don't run scripts yet
+COPY client/package*.json ./client/
+RUN cd client && npm install --ignore-scripts
 
-COPY client/package.json client/package-lock.json ./client/
-
-RUN npm install --prefix client --ignore-scripts
-
-# ------------------------------------------------
-# PYTHON DEPENDENCIES
-# ------------------------------------------------
-
+# Python dependencies
 COPY server/requirements.txt ./server/
-
-RUN pip3 install --no-cache-dir \
-    --break-system-packages \
+RUN pip3 install --break-system-packages --no-cache-dir \
     -r server/requirements.txt
 
-# ------------------------------------------------
-# COPY SOURCE
-# ------------------------------------------------
-
+# Application source
 COPY . .
 
-# ------------------------------------------------
-# BUILD FRONTEND
-# ------------------------------------------------
+# Frontend
+RUN cd client && npm run build
 
-RUN npm --prefix client run build
-
-# ------------------------------------------------
-# CREATE REQUIRED DIRECTORIES
-# ------------------------------------------------
-
+# Runtime folders
 RUN mkdir -p \
-    server/uploads \
     server/uploads/previews \
     server/exports \
     server/samples \
@@ -79,10 +52,6 @@ RUN mkdir -p \
     server/uploads \
     server/exports \
     server/samples
-
-# ------------------------------------------------
-# RENDER PORT
-# ------------------------------------------------
 
 EXPOSE 10000
 
