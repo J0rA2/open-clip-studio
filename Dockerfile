@@ -1,17 +1,30 @@
 FROM node:20-bullseye-slim
 
 # Install system dependencies: Python 3, pip, ffmpeg, fonts for subtitles
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    python3-pip \
-    python3-dev \
-    ffmpeg \
-    fontconfig \
-    fonts-noto-color-emoji \
-    fonts-freefont-ttf \
-    curl \
-    git \
+FROM python:3.12-bookworm
+
+ENV PYTHONUNBUFFERED=1
+ENV DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ffmpeg \
+        fontconfig \
+        fonts-noto-color-emoji \
+        fonts-freefont-ttf \
+        curl \
+        git \
     && rm -rf /var/lib/apt/lists/*
+
+COPY . .
+
+RUN if [ -f requirements.txt ]; then pip install --no-cache-dir -r requirements.txt; fi
+
+ENV PORT=10000
+
+EXPOSE 10000
 
 # Install latest yt-dlp globally
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
